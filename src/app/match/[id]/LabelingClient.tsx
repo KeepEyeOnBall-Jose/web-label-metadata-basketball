@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { Match, LabelEvent, EventType } from "@/lib/types";
 import { DEFAULT_EVENT_TYPES } from "@/lib/types";
+import { enqueueEvent, flushOfflineQueue, getQueueLength } from "@/lib/offlineQueue";
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export default function LabelingClient({ match }: LabelingClientProps) {
     const [flashBtn, setFlashBtn] = useState<string | null>(null);
     const [elapsed, setElapsed] = useState("00:00");
     const errorTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [queuedCount, setQueuedCount] = useState(0);
 
     const eventTypes: EventType[] = match.eventTypes?.length
         ? match.eventTypes
@@ -49,7 +51,7 @@ export default function LabelingClient({ match }: LabelingClientProps) {
         return () => clearInterval(interval);
     }, [match.startedAt]);
 
-    // Load existing events on mount
+    // Load existing events on mount + flush offline queue
     useEffect(() => {
         fetch(`/api/events?matchId=${match.id}`)
             .then((r) => r.json())
@@ -57,6 +59,26 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 if (Array.isArray(data)) setEvents(data);
             })
             .catch(() => { });
+
+        // Flush any offline-queued events
+        flushOfflineQueue().then((synced) => {
+            if (synced.length > 0) {
+                setEvents((prev) => [...synced.reverse(), ...prev]);
+            }
+            setQueuedCount(getQueueLength());
+        });
+
+        // Re-flush when coming back online
+        const handleOnline = () => {
+            flushOfflineQueue().then((synced) => {
+                if (synced.length > 0) {
+                    setEvents((prev) => [...synced.reverse(), ...prev]);
+                }
+                setQueuedCount(getQueueLength());
+            });
+        };
+        window.addEventListener("online", handleOnline);
+        return () => window.removeEventListener("online", handleOnline);
     }, [match.id]);
 
     // Show error for 3 seconds
@@ -92,14 +114,20 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 });
 
                 if (!res.ok) {
-                    showError("Failed to record event");
+                    // Server rejected — queue offline
+                    enqueueEvent({ matchId: match.id, eventType, clientTimestamp });
+                    setQueuedCount(getQueueLength());
+                    showError("Queued offline");
                     return;
                 }
 
                 const event = (await res.json()) as LabelEvent;
                 setEvents((prev) => [event, ...prev]);
             } catch {
-                showError("Network error — event not saved");
+                // Network failure — queue offline
+                enqueueEvent({ matchId: match.id, eventType, clientTimestamp });
+                setQueuedCount(getQueueLength());
+                showError("Offline — event queued");
             }
         },
         [match.id, showError]
@@ -156,7 +184,14 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                         {match.startedAt ? elapsed : match.status}
                     </div>
                 </div>
-                <div className="event-count">{activeCount}</div>
+                <div className="event-count">
+                    {activeCount}
+                    {queuedCount > 0 && (
+                        <span style={{ color: "var(--warning)", fontSize: "0.65rem", display: "block" }}>
+                            +{queuedCount} queued
+                        </span>
+                    )}
+                </div>
             </header>
 
             {/* Event Grid */}
