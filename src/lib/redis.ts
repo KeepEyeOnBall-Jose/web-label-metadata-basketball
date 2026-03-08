@@ -98,4 +98,96 @@ export async function softDeleteEvent(
     return true;
 }
 
+// ── Admin helpers ───────────────────────────────────────────
+
+export interface ActiveUser {
+    email: string;
+    lastSeen: number;
+    totalEvents: number;
+}
+
+/**
+ * Scan all event keys and return recent labels + active users.
+ * Used by the backend admin dashboard.
+ */
+export async function scanAllRecentEvents(limit = 50): Promise<{
+    events: LabelEvent[];
+    activeUsers: ActiveUser[];
+}> {
+    // Discover all event keys
+    const allKeys: string[] = [];
+    let cursor = "0";
+    do {
+        const result = await redis.scan(cursor, {
+            match: "events:*:*",
+            count: 100,
+        });
+        cursor = String(result[0]);
+        allKeys.push(...result[1]);
+    } while (cursor !== "0");
+
+    // Collect events from all keys (take first few from each for efficiency)
+    const allEvents: LabelEvent[] = [];
+    for (const key of allKeys) {
+        const events = await redis.lrange<LabelEvent>(key, 0, 49);
+        allEvents.push(...events);
+    }
+
+    // Sort by server timestamp desc (newest first)
+    allEvents.sort((a, b) => b.serverTimestamp - a.serverTimestamp);
+
+    // Derive active users from events
+    const userMap = new Map<string, { lastSeen: number; count: number }>();
+    for (const ev of allEvents) {
+        if (ev.deleted) continue;
+        const existing = userMap.get(ev.userEmail);
+        if (!existing) {
+            userMap.set(ev.userEmail, { lastSeen: ev.serverTimestamp, count: 1 });
+        } else {
+            existing.count++;
+            if (ev.serverTimestamp > existing.lastSeen) {
+                existing.lastSeen = ev.serverTimestamp;
+            }
+        }
+    }
+
+    const activeUsers: ActiveUser[] = Array.from(userMap.entries())
+        .map(([email, { lastSeen, count }]) => ({
+            email,
+            lastSeen,
+            totalEvents: count,
+        }))
+        .sort((a, b) => b.lastSeen - a.lastSeen);
+
+    return {
+        events: allEvents.filter((e) => !e.deleted).slice(0, limit),
+        activeUsers,
+    };
+}
+
+const TEST_MATCH_ID = "test-match";
+
+/**
+ * Ensure a test match always exists. Creates one if missing.
+ * Returns the test match object.
+ */
+export async function ensureTestMatch(): Promise<Match> {
+    const existing = await getMatch(TEST_MATCH_ID);
+    if (existing) return existing;
+
+    const testMatch: Match = {
+        id: TEST_MATCH_ID,
+        name: "🧪 TEST — Practice Labeling",
+        homeTeam: "Test Home",
+        awayTeam: "Test Away",
+        status: "live",
+        eventTypes: [],  // will use DEFAULT_EVENT_TYPES client-side
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+    };
+
+    await createMatch(testMatch);
+    return testMatch;
+}
+
 export default redis;
