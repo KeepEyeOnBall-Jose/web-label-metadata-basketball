@@ -416,6 +416,133 @@ body {
   }
 }
 
+/* ── Follow-Up Overlay (two-step labels) ──────────────────── */
+
+.followup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.15s ease-out;
+  padding: 16px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.followup-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: slide-in 0.2s ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.followup-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  border-radius: var(--radius);
+}
+
+.followup-event {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.followup-question {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.followup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.followup-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.followup-btn:active {
+  transform: scale(0.95);
+}
+
+.followup-btn-label {
+  font-size: 2rem;
+  font-weight: 800;
+  color: white;
+  font-family: var(--font);
+  letter-spacing: 0.05em;
+}
+
+.followup-btn-team {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--font);
+  margin-top: 4px;
+}
+
+.followup-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.followup-cancel:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 /* ── Undo Bar ──────────────────────────────────────────────── */
 
 .undo-bar {
