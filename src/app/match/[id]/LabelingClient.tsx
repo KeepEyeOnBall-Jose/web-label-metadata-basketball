@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { Match, LabelEvent, EventType, FollowUp } from "@/lib/types";
-import { DEFAULT_EVENT_TYPES } from "@/lib/types";
+import type { Match, LabelEvent, EventType, FollowUp, GameState } from "@/lib/types";
+import {
+    DEFAULT_EVENT_TYPES,
+    GAME_TRANSITIONS,
+    PLAY_ACTIVE_STATES,
+    deriveGameState,
+    gameStateLabel,
+} from "@/lib/types";
 import { enqueueEvent, flushOfflineQueue, getQueueLength } from "@/lib/offlineQueue";
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -24,6 +30,7 @@ function timeAgo(timestamp: number): string {
 }
 
 // ── Layout Definition ───────────────────────────────────────
+// Button order: FT (1pt) → 2PT → 3PT (ascending point value)
 
 interface GridRow {
     left: string;
@@ -32,9 +39,9 @@ interface GridRow {
 }
 
 const GRID_LAYOUT: GridRow[] = [
-    { left: "2pt_made", right: "2pt_missed", category: "SCORING" },
+    { left: "ft_made", right: "ft_missed", category: "SCORING" },
+    { left: "2pt_made", right: "2pt_missed" },
     { left: "3pt_made", right: "3pt_missed" },
-    { left: "ft_made", right: "ft_missed" },
     { left: "pass", right: "rebound", category: "PLAY" },
     { left: "steal", right: "turnover" },
     { left: "foul", right: "timeout" },
@@ -73,6 +80,20 @@ export default function LabelingClient({ match }: LabelingClientProps) {
 
     const getET = (key: string): EventType | undefined =>
         eventTypes.find((t) => t.key === key);
+
+    // ── Game State ──────────────────────────────────────────
+    const gameState: GameState = useMemo(
+        () => deriveGameState(events),
+        [events]
+    );
+
+    const isPlayActive = PLAY_ACTIVE_STATES.includes(gameState);
+
+    // Available transitions from current state
+    const availableTransitions = useMemo(
+        () => GAME_TRANSITIONS.filter((t) => t.fromState === gameState),
+        [gameState]
+    );
 
     // Timer
     useEffect(() => {
@@ -129,6 +150,18 @@ export default function LabelingClient({ match }: LabelingClientProps) {
 
             if (navigator.vibrate) navigator.vibrate(30);
 
+            // Build an optimistic local event (used when API unavailable)
+            const optimisticEvent: LabelEvent = {
+                id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                matchId: match.id,
+                userId: "local",
+                userEmail: "local",
+                eventType,
+                serverTimestamp: ts,
+                clientTimestamp: ts,
+                deleted: false,
+            };
+
             try {
                 const res = await fetch("/api/events", {
                     method: "POST",
@@ -143,7 +176,8 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 if (!res.ok) {
                     enqueueEvent({ matchId: match.id, eventType, clientTimestamp: ts });
                     setQueuedCount(getQueueLength());
-                    showError("Queued offline");
+                    // Add optimistic event so FSM and undo bar still work
+                    setEvents((prev) => [optimisticEvent, ...prev]);
                     return;
                 }
 
@@ -152,7 +186,8 @@ export default function LabelingClient({ match }: LabelingClientProps) {
             } catch {
                 enqueueEvent({ matchId: match.id, eventType, clientTimestamp: ts });
                 setQueuedCount(getQueueLength());
-                showError("Offline — event queued");
+                // Add optimistic event so FSM and undo bar still work
+                setEvents((prev) => [optimisticEvent, ...prev]);
             }
         },
         [match.id, showError]
@@ -198,6 +233,15 @@ export default function LabelingClient({ match }: LabelingClientProps) {
         setPendingFollowUp(null);
     }, []);
 
+    // ── Handle control transition ───────────────────────────
+    const handleTransition = useCallback(
+        (eventKey: string) => {
+            if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+            recordEvent(eventKey);
+        },
+        [recordEvent]
+    );
+
     // Undo an event
     const undoEvent = useCallback(
         async (eventId: string) => {
@@ -227,10 +271,16 @@ export default function LabelingClient({ match }: LabelingClientProps) {
     );
 
     const recentEvents = events.filter((e) => !e.deleted).slice(0, 5);
-    const activeCount = events.filter((e) => !e.deleted).length;
+    const activeCount = events.filter((e) => !e.deleted && !e.eventType.startsWith("control:")).length;
 
     // ── Resolve display label for compound event types ──────
     const getDisplayLabel = (eventType: string): string => {
+        // Control events
+        if (eventType.startsWith("control:")) {
+            const transition = GAME_TRANSITIONS.find((t) => t.eventKey === eventType);
+            return transition?.label ?? eventType;
+        }
+
         const parts = eventType.split(":");
         const baseKey = parts[0];
         const et = getET(baseKey);
@@ -238,7 +288,6 @@ export default function LabelingClient({ match }: LabelingClientProps) {
         if (parts.length === 1) return et.shortLabel;
 
         // Build compact tag from suffix parts
-        // "home" → "H", "away" → "A", "personal" → "PER", etc.
         const tags = parts.slice(1).map((p) => {
             if (p === "home") return "H";
             if (p === "away") return "A";
@@ -248,6 +297,10 @@ export default function LabelingClient({ match }: LabelingClientProps) {
     };
 
     const getDisplayColor = (eventType: string): string | undefined => {
+        if (eventType.startsWith("control:")) {
+            const transition = GAME_TRANSITIONS.find((t) => t.eventKey === eventType);
+            return transition?.color;
+        }
         const baseKey = eventType.split(":")[0];
         return getET(baseKey)?.color;
     };
@@ -274,6 +327,41 @@ export default function LabelingClient({ match }: LabelingClientProps) {
         );
     };
 
+    // ── Transition screen for non-play states ───────────────
+    const renderTransitionScreen = () => {
+        const stLabel = gameStateLabel(gameState);
+
+        if (gameState === "POST_GAME") {
+            return (
+                <div className="transition-screen">
+                    <div className="transition-icon">🏁</div>
+                    <h2 className="transition-title">Game Over</h2>
+                    <p className="transition-subtitle">{match.name}</p>
+                    <p className="transition-stats">{activeCount} events recorded</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="transition-screen">
+                <div className="transition-status">{stLabel}</div>
+                <p className="transition-subtitle">{match.name}</p>
+                <div className="transition-actions">
+                    {availableTransitions.map((t) => (
+                        <button
+                            key={t.eventKey}
+                            className="transition-btn"
+                            style={{ backgroundColor: t.color }}
+                            onClick={() => handleTransition(t.eventKey)}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="labeling-page">
             {/* Header */}
@@ -284,7 +372,10 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 <div className="match-info">
                     <h2>{match.name}</h2>
                     <div className="timer">
-                        {match.startedAt ? elapsed : match.status}
+                        {isPlayActive ? (
+                            <span className="quarter-badge">{gameStateLabel(gameState)}</span>
+                        ) : null}
+                        {match.startedAt ? ` ${elapsed}` : ` ${match.status}`}
                     </div>
                 </div>
                 <div className="event-count">
@@ -297,20 +388,43 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 </div>
             </header>
 
-            {/* Semantic Grid */}
-            <div className="event-grid-v2">
-                {GRID_LAYOUT.map((row, i) => (
-                    <div key={i} className="grid-row-wrap">
-                        {row.category && (
-                            <div className="grid-section-label">{row.category}</div>
-                        )}
-                        <div className={`grid-row ${!row.right ? "single" : ""}`}>
-                            {renderBtn(row.left, !row.right)}
-                            {row.right && renderBtn(row.right)}
+            {/* ── Main Content: either play grid or transition screen ── */}
+            {isPlayActive ? (
+                <>
+                    {/* Active quarter header with end-quarter button */}
+                    {availableTransitions.length > 0 && (
+                        <div className="quarter-controls">
+                            {availableTransitions.map((t) => (
+                                <button
+                                    key={t.eventKey}
+                                    className="quarter-end-btn"
+                                    style={{ borderColor: t.color, color: t.color }}
+                                    onClick={() => handleTransition(t.eventKey)}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
                         </div>
+                    )}
+
+                    {/* Semantic Grid */}
+                    <div className="event-grid-v2">
+                        {GRID_LAYOUT.map((row, i) => (
+                            <div key={i} className="grid-row-wrap">
+                                {row.category && (
+                                    <div className="grid-section-label">{row.category}</div>
+                                )}
+                                <div className={`grid-row ${!row.right ? "single" : ""}`}>
+                                    {renderBtn(row.left, !row.right)}
+                                    {row.right && renderBtn(row.right)}
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
+                </>
+            ) : (
+                renderTransitionScreen()
+            )}
 
             {/* Undo Bar */}
             <div className="undo-bar">
@@ -338,7 +452,6 @@ export default function LabelingClient({ match }: LabelingClientProps) {
             {/* Follow-Up Overlay */}
             {pendingFollowUp && (() => {
                 const opts = pendingFollowUp.followUp.options;
-                // Detect grid layout: options with "home:" and "away:" prefixes
                 const homeOpts = opts.filter((o) => o.suffix.startsWith("home"));
                 const awayOpts = opts.filter((o) => o.suffix.startsWith("away"));
                 const isGrid = homeOpts.length > 0 && awayOpts.length > 0 && homeOpts.length === awayOpts.length;
@@ -355,7 +468,6 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                             <div className="followup-question">{pendingFollowUp.followUp.question}</div>
 
                             {isGrid ? (
-                                /* ── Grid layout: team columns × type rows ── */
                                 <div className="followup-grid">
                                     <div className="followup-col-header home">{match.homeTeam}</div>
                                     <div className="followup-col-header away">{match.awayTeam}</div>
@@ -382,7 +494,6 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                                     })}
                                 </div>
                             ) : (
-                                /* ── Simple vertical layout (SUB, T/O) ── */
                                 <div className="followup-options">
                                     {opts.map((opt) => (
                                         <button
