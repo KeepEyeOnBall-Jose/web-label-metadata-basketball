@@ -2,7 +2,9 @@
 
 /* ── Reset & Base ──────────────────────────────────────────── */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -33,14 +35,16 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-html, body {
+html,
+body {
   height: 100%;
   font-family: var(--font);
   background: var(--bg-primary);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden; /* Prevent scroll on the labeling page */
+  overflow: hidden;
+  /* Prevent scroll on the labeling page */
   /* Prevent text selection on tap */
   -webkit-user-select: none;
   user-select: none;
@@ -230,8 +234,15 @@ html, body {
 }
 
 @keyframes pulse-live {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .empty-state {
@@ -308,16 +319,47 @@ html, body {
   text-align: right;
 }
 
-/* ── Event Grid ────────────────────────────────────────────── */
+/* ── Event Grid v2 (semantic 2-column layout) ─────────────── */
 
-.event-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 12px;
+.event-grid-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 6px 8px;
   flex: 1;
-  align-content: stretch;
+  overflow-y: auto;
+  justify-content: stretch;
 }
+
+.grid-row-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.grid-section-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 6px 2px;
+  margin-top: 2px;
+}
+
+.grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 3px 0;
+  flex: 1;
+}
+
+.grid-row.single {
+  grid-template-columns: 1fr;
+}
+
+/* ── Event Buttons ────────────────────────────────────────── */
 
 .event-btn {
   display: flex;
@@ -327,45 +369,36 @@ html, body {
   border: none;
   border-radius: var(--radius);
   font-family: var(--font);
-  font-weight: 700;
-  font-size: 1.1rem;
   color: white;
   cursor: pointer;
   position: relative;
   overflow: hidden;
   transition: transform 0.1s ease;
-  /* Minimum touch target */
-  min-height: 64px;
-  /* Prevent text selection */
+  min-height: 56px;
+  padding: 8px 4px;
   -webkit-tap-highlight-color: transparent;
+}
+
+.event-btn .btn-short {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.event-btn .btn-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.event-btn.full-width {
+  max-width: 50%;
 }
 
 .event-btn:active {
   transform: scale(0.92);
-}
-
-.event-btn .label {
-  font-size: 0.65rem;
-  font-weight: 500;
-  opacity: 0.8;
-  margin-top: 2px;
-}
-
-/* Tap ripple effect */
-.event-btn .ripple {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-  transform: scale(0);
-  animation: ripple-anim 0.4s ease-out forwards;
-  pointer-events: none;
-}
-
-@keyframes ripple-anim {
-  to {
-    transform: scale(4);
-    opacity: 0;
-  }
 }
 
 /* Flash confirmation */
@@ -374,8 +407,13 @@ html, body {
 }
 
 @keyframes flash-anim {
-  0% { filter: brightness(1.8); }
-  100% { filter: brightness(1); }
+  0% {
+    filter: brightness(1.8);
+  }
+
+  100% {
+    filter: brightness(1);
+  }
 }
 
 /* ── Undo Bar ──────────────────────────────────────────────── */
@@ -465,7 +503,9 @@ html, body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-toast {
@@ -489,6 +529,7 @@ html, body {
     transform: translateX(-50%) translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateX(-50%) translateY(0);
     opacity: 1;

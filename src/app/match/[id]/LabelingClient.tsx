@@ -23,6 +23,29 @@ function timeAgo(timestamp: number): string {
     return `${mins}m ago`;
 }
 
+// ── Layout Definition ───────────────────────────────────────
+// Rows define the semantic grid:
+// - Scoring rows: success (left) / fail (right), ordered by frequency
+// - Non-scoring rows: ordered by frequency, paired in 2-column
+
+interface GridRow {
+    left: string;       // event key for left button
+    right?: string;     // event key for right button (omit for full-width)
+    category?: string;  // optional section label
+}
+
+const GRID_LAYOUT: GridRow[] = [
+    // ── Scoring: ✓ left, ✗ right, most frequent first ──
+    { left: "2pt_made", right: "2pt_missed", category: "SCORING" },
+    { left: "3pt_made", right: "3pt_missed" },
+    { left: "ft_made", right: "ft_missed" },
+    // ── Non-scoring: by frequency ──
+    { left: "pass", right: "rebound", category: "PLAY" },
+    { left: "foul", right: "turnover" },
+    { left: "steal", right: "timeout" },
+    { left: "substitution" },
+];
+
 // ── Component ───────────────────────────────────────────────
 
 interface LabelingClientProps {
@@ -41,6 +64,10 @@ export default function LabelingClient({ match }: LabelingClientProps) {
     const eventTypes: EventType[] = match.eventTypes?.length
         ? match.eventTypes
         : DEFAULT_EVENT_TYPES;
+
+    // Helper to find an EventType by key
+    const getET = (key: string): EventType | undefined =>
+        eventTypes.find((t) => t.key === key);
 
     // Timer
     useEffect(() => {
@@ -171,6 +198,24 @@ export default function LabelingClient({ match }: LabelingClientProps) {
 
     const activeCount = events.filter((e) => !e.deleted).length;
 
+    // ── Render a single event button ────────────────────────
+    const renderBtn = (key: string, fullWidth?: boolean) => {
+        const et = getET(key);
+        if (!et) return null;
+        return (
+            <button
+                key={et.key}
+                className={`event-btn ${flashBtn === et.key ? "flash" : ""} ${fullWidth ? "full-width" : ""}`}
+                style={{ backgroundColor: et.color }}
+                onClick={() => recordEvent(et.key)}
+                id={`btn-${et.key}`}
+            >
+                <span className="btn-short">{et.shortLabel}</span>
+                <span className="btn-label">{et.label}</span>
+            </button>
+        );
+    };
+
     return (
         <div className="labeling-page">
             {/* Header */}
@@ -194,19 +239,18 @@ export default function LabelingClient({ match }: LabelingClientProps) {
                 </div>
             </header>
 
-            {/* Event Grid */}
-            <div className="event-grid">
-                {eventTypes.map((et) => (
-                    <button
-                        key={et.key}
-                        className={`event-btn ${flashBtn === et.key ? "flash" : ""}`}
-                        style={{ backgroundColor: et.color }}
-                        onClick={() => recordEvent(et.key)}
-                        id={`btn-${et.key}`}
-                    >
-                        {et.shortLabel}
-                        <span className="label">{et.label}</span>
-                    </button>
+            {/* Semantic Grid */}
+            <div className="event-grid-v2">
+                {GRID_LAYOUT.map((row, i) => (
+                    <div key={i} className="grid-row-wrap">
+                        {row.category && (
+                            <div className="grid-section-label">{row.category}</div>
+                        )}
+                        <div className={`grid-row ${!row.right ? "single" : ""}`}>
+                            {renderBtn(row.left, !row.right)}
+                            {row.right && renderBtn(row.right)}
+                        </div>
+                    </div>
                 ))}
             </div>
 

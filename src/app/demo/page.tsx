@@ -9,9 +9,9 @@ import type { Match } from "@/lib/types";
 export default function DemoPage() {
     const demoMatch: Match = {
         id: "demo",
-        name: "Lakers vs Celtics",
-        homeTeam: "Lakers",
-        awayTeam: "Celtics",
+        name: "Madrid Elite Blanco vs FGS Sports",
+        homeTeam: "Madrid Elite Blanco",
+        awayTeam: "FGS Sports C.D.E.",
         status: "live",
         eventTypes: DEFAULT_EVENT_TYPES,
         createdAt: Date.now(),
