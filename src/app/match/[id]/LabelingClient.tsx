@@ -231,13 +231,20 @@ export default function LabelingClient({ match }: LabelingClientProps) {
 
     // ── Resolve display label for compound event types ──────
     const getDisplayLabel = (eventType: string): string => {
-        const [baseKey, suffix] = eventType.split(":");
+        const parts = eventType.split(":");
+        const baseKey = parts[0];
         const et = getET(baseKey);
         if (!et) return eventType;
-        if (!suffix) return et.shortLabel;
-        // e.g. "SUB·H" or "FOUL·A"
-        const tag = suffix === "home" ? "H" : suffix === "away" ? "A" : suffix.toUpperCase();
-        return `${et.shortLabel}·${tag}`;
+        if (parts.length === 1) return et.shortLabel;
+
+        // Build compact tag from suffix parts
+        // "home" → "H", "away" → "A", "personal" → "PER", etc.
+        const tags = parts.slice(1).map((p) => {
+            if (p === "home") return "H";
+            if (p === "away") return "A";
+            return p.slice(0, 3).toUpperCase();
+        });
+        return `${et.shortLabel}·${tags.join("·")}`;
     };
 
     const getDisplayColor = (eventType: string): string | undefined => {
@@ -329,37 +336,77 @@ export default function LabelingClient({ match }: LabelingClientProps) {
             </div>
 
             {/* Follow-Up Overlay */}
-            {pendingFollowUp && (
-                <div className="followup-overlay" onClick={cancelFollowUp}>
-                    <div className="followup-card" onClick={(e) => e.stopPropagation()}>
-                        <div
-                            className="followup-header"
-                            style={{ backgroundColor: pendingFollowUp.color }}
-                        >
-                            <span className="followup-event">{pendingFollowUp.shortLabel}</span>
+            {pendingFollowUp && (() => {
+                const opts = pendingFollowUp.followUp.options;
+                // Detect grid layout: options with "home:" and "away:" prefixes
+                const homeOpts = opts.filter((o) => o.suffix.startsWith("home"));
+                const awayOpts = opts.filter((o) => o.suffix.startsWith("away"));
+                const isGrid = homeOpts.length > 0 && awayOpts.length > 0 && homeOpts.length === awayOpts.length;
+
+                return (
+                    <div className="followup-overlay" onClick={cancelFollowUp}>
+                        <div className="followup-card" onClick={(e) => e.stopPropagation()}>
+                            <div
+                                className="followup-header"
+                                style={{ backgroundColor: pendingFollowUp.color }}
+                            >
+                                <span className="followup-event">{pendingFollowUp.shortLabel}</span>
+                            </div>
+                            <div className="followup-question">{pendingFollowUp.followUp.question}</div>
+
+                            {isGrid ? (
+                                /* ── Grid layout: team columns × type rows ── */
+                                <div className="followup-grid">
+                                    <div className="followup-col-header home">{match.homeTeam}</div>
+                                    <div className="followup-col-header away">{match.awayTeam}</div>
+                                    {homeOpts.map((homeOpt, i) => {
+                                        const awayOpt = awayOpts[i];
+                                        return (
+                                            <div key={i} className="followup-grid-row">
+                                                <button
+                                                    className="followup-btn"
+                                                    style={{ backgroundColor: homeOpt.color }}
+                                                    onClick={() => handleFollowUpSelect(homeOpt.suffix)}
+                                                >
+                                                    <span className="followup-btn-label">{homeOpt.label}</span>
+                                                </button>
+                                                <button
+                                                    className="followup-btn"
+                                                    style={{ backgroundColor: awayOpt.color }}
+                                                    onClick={() => handleFollowUpSelect(awayOpt.suffix)}
+                                                >
+                                                    <span className="followup-btn-label">{awayOpt.label}</span>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                /* ── Simple vertical layout (SUB, T/O) ── */
+                                <div className="followup-options">
+                                    {opts.map((opt) => (
+                                        <button
+                                            key={opt.suffix}
+                                            className="followup-btn"
+                                            style={{ backgroundColor: opt.color }}
+                                            onClick={() => handleFollowUpSelect(opt.suffix)}
+                                        >
+                                            <span className="followup-btn-label">{opt.label}</span>
+                                            <span className="followup-btn-team">
+                                                {opt.suffix === "home" ? match.homeTeam : match.awayTeam}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <button className="followup-cancel" onClick={cancelFollowUp}>
+                                Cancel
+                            </button>
                         </div>
-                        <div className="followup-question">{pendingFollowUp.followUp.question}</div>
-                        <div className="followup-options">
-                            {pendingFollowUp.followUp.options.map((opt) => (
-                                <button
-                                    key={opt.suffix}
-                                    className="followup-btn"
-                                    style={{ backgroundColor: opt.color }}
-                                    onClick={() => handleFollowUpSelect(opt.suffix)}
-                                >
-                                    <span className="followup-btn-label">{opt.label}</span>
-                                    <span className="followup-btn-team">
-                                        {opt.suffix === "home" ? match.homeTeam : match.awayTeam}
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                        <button className="followup-cancel" onClick={cancelFollowUp}>
-                            Cancel
-                        </button>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Error Toast */}
             {error && <div className="error-toast">{error}</div>}

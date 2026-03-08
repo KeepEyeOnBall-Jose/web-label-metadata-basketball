@@ -70,10 +70,14 @@ export const DEFAULT_EVENT_TYPES: EventType[] = [
   {
     key: "foul", label: "Foul", shortLabel: "FOUL", color: "#FFA726", // amber
     followUp: {
-      question: "Which team?",
+      question: "What kind?",
       options: [
-        { suffix: "home", label: "HOME", color: "#1565C0" },
-        { suffix: "away", label: "AWAY", color: "#AD1457" },
+        { suffix: "home:personal", label: "PERSONAL", color: "#1565C0" },
+        { suffix: "away:personal", label: "PERSONAL", color: "#AD1457" },
+        { suffix: "home:technical", label: "TECHNICAL", color: "#0D47A1" },
+        { suffix: "away:technical", label: "TECHNICAL", color: "#880E4F" },
+        { suffix: "home:flagrant", label: "FLAGRANT", color: "#0A3069" },
+        { suffix: "away:flagrant", label: "FLAGRANT", color: "#6A0035" },
       ],
     },
   },

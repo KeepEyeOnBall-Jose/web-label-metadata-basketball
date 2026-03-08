@@ -522,6 +522,39 @@ body {
   margin-top: 4px;
 }
 
+/* ── Follow-Up Grid (team columns × type rows) ───────────── */
+
+.followup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.followup-col-header {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+  color: white;
+}
+
+.followup-col-header.home {
+  background: rgba(21, 101, 192, 0.3);
+  color: #64B5F6;
+}
+
+.followup-col-header.away {
+  background: rgba(173, 20, 87, 0.3);
+  color: #F48FB1;
+}
+
+.followup-grid-row {
+  display: contents;
+}
+
 .followup-cancel {
   display: flex;
   align-items: center;
